@@ -33,9 +33,20 @@ A visualization tool for Astyx multi-sensor data.
     
     `right` / `down`: next data frame 
 
+5. **my use
+
+    
+    ```
+    AOD_HOME=/data/palakons/dataset/radar_dataset_astyx_genai/dataset_astyx_hires2019/
+    python visualize_annotation.py -s 436 -n 110
+    ```
+
+
 ## Sample results
 
 <img src="res/annotation.png" />
+
+<img src="res/000545.jpg" />
 
 <img src="res/animation.gif" />
 

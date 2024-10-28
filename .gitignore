@@ -1,3 +1,6 @@
 visualize_with_annotation.py
 .idea/
-res 
+res/*
+!res/annotation.png
+!res/animation.gif
+!res/000545.jpg
