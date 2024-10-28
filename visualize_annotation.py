@@ -23,8 +23,11 @@ def is_float(str_val):
 def read_file(filename, filetype):
     if filetype == 'radar':
         sensor_data_dir = radar_data_dir
+    elif filetype == 'radar_old':
+        sensor_data_dir = radar_sensor_data_dir
     else:
         sensor_data_dir = lidar_data_dir
+    # print(f'filename {filetype}: {sensor_data_dir }{ filename}')
 
     p = []
     with open(sensor_data_dir + filename) as f:
@@ -201,10 +204,12 @@ def plot_3Dbox_on_image(dx, qs, classid, color, linewidth=3):
     return 0
 
 
-def plot_annotation(filename):
+def plot_annotation(filename,output_fname=None):
     # get radar/lidar pcl data
     radar_pcl = read_file(filename, 'radar')
-    lidar_pcl = read_file(filename, 'lidar')
+    radar_pcl_old = read_file(filename, 'radar_old')
+
+    # print(f'radar_pcl: {radar_pcl.shape}, radar_pcl_old: {radar_pcl_old.shape}')
 
     # get transform matrix from calibration file
     T_toLidar, T_toCamera, K = get_calibration(filename)
@@ -213,7 +218,76 @@ def plot_annotation(filename):
     objects, classids = get_objects(filename)
 
     gs = gridspec.GridSpec(2, 2)
-    # fig = plt.figure()
+    fig = plt.figure(   figsize=(10, 10))
+    # plt.get_current_fig_manager().full_screen_toggle()
+
+    # plot radar pcl on x-y dimension
+    ax = fig.add_subplot(gs[0, 0])
+    ax.scatter(radar_pcl[:, 0], radar_pcl[:, 1], c='darkblue', s=1, alpha=0.5)
+    ax.set_title('GenAI Radar Point Cloud 2D Visualization:' + filename[:6] + '.txt')
+    ax.set_xlim(0, 100)  # (-100, 100)
+    ax.set_ylim(-50, 50)  # (0, 100)
+
+    # add 2D annotation on radar pcl plot
+    for obj, classid in zip(objects, classids):
+        plot_2Dbox_on_pcl(ax, obj, classid)
+
+    # plot lidar pcl on x-y dimension
+    ax = fig.add_subplot(gs[0, 1])
+    ax.scatter(radar_pcl_old[:, 0], radar_pcl_old[:, 1], c='darkblue', s=1, alpha=0.5)
+    ax.set_title('Radar Point Cloud 2D Visualization:' + filename[:6] + '.txt')
+    ax.set_xlim(-10, 100)
+    ax.set_ylim(-50, 50)
+
+    # get ground truth objects in lidar coordinator system
+    objects_lidar = get_objects_lidar(objects, T_toLidar)
+
+    # add 2D annotation on lidar pcl
+    for obj, classid in zip(objects_lidar, classids):
+        plot_2Dbox_on_pcl(ax, obj, classid)
+
+    # plot camera image
+    ax = fig.add_subplot(gs[1, :])
+    image_path = camera_data_dir + filename[:6] + '.jpg'
+    # print(f'camera image: {image_path}')
+    ax.set_title('Camera Image:' + filename[:6] + '.jpg')
+    camera_image = Image.open(image_path)
+    box_draw = ImageDraw.Draw(camera_image)
+
+    # get ground truth objects in camera image 2D coordinator system
+    objects_2Dimage = get_objects_2Dimage(objects, T_toCamera, K)
+
+    # plot 3D annotation on camera image
+    number_of_colors = len(objects_2Dimage)
+    colorlist = ["#" + ''.join([random.choice('0123456789ABCDEF') for j in range(6)])
+                 for i in range(number_of_colors)]
+    for obj, classid, n in zip(objects_2Dimage, classids, range(0, len(objects_2Dimage))):
+        plot_3Dbox_on_image(box_draw, obj, classid, colorlist[n])
+    fig.canvas.draw()
+    ax.imshow(camera_image)
+    if output_fname is not None:
+        fig.savefig(output_fname)
+        fig.clf()
+    else:
+        plt.show()
+    return 0
+
+
+def plot_annotation_old(filename,output_fname=None):
+    # get radar/lidar pcl data
+    radar_pcl = read_file(filename, 'radar')
+    lidar_pcl = read_file(filename, 'lidar')
+
+    # print(f'radar_pcl: {radar_pcl.shape}, lidar_pcl: {lidar_pcl.shape}')
+
+    # get transform matrix from calibration file
+    T_toLidar, T_toCamera, K = get_calibration(filename)
+
+    # get ground truth objects info
+    objects, classids = get_objects(filename)
+
+    gs = gridspec.GridSpec(2, 2)
+    fig = plt.figure(   figsize=(10, 10))
     # plt.get_current_fig_manager().full_screen_toggle()
 
     # plot radar pcl on x-y dimension
@@ -244,6 +318,7 @@ def plot_annotation(filename):
     # plot camera image
     ax = fig.add_subplot(gs[1, :])
     image_path = camera_data_dir + filename[:6] + '.jpg'
+    # print(f'camera image: {image_path}')
     ax.set_title('Camera Image:' + filename[:6] + '.jpg')
     camera_image = Image.open(image_path)
     box_draw = ImageDraw.Draw(camera_image)
@@ -257,9 +332,12 @@ def plot_annotation(filename):
                  for i in range(number_of_colors)]
     for obj, classid, n in zip(objects_2Dimage, classids, range(0, len(objects_2Dimage))):
         plot_3Dbox_on_image(box_draw, obj, classid, colorlist[n])
+    fig.canvas.draw()
     ax.imshow(camera_image)
-    # fig.canvas.draw()
-    # plt.show()
+    if output_fname is not None:
+        fig.savefig(output_fname)
+    else:
+        plt.show()
     return 0
 
 
@@ -267,6 +345,7 @@ root_dir = os.environ['AOD_HOME']
 groundtruth_data_dir = root_dir + 'groundtruth_obj3d/'
 calib_dir = root_dir + 'calibration/'
 radar_data_dir = root_dir + 'radar_6455/'
+radar_sensor_data_dir = root_dir + '../../radar_dataset_astyx/dataset_astyx_hires2019/radar_6455/'
 lidar_data_dir = root_dir + 'lidar_vlp16/'
 camera_data_dir = root_dir + 'camera_front/'
 fig = plt.figure()
@@ -295,10 +374,16 @@ def main(argv):
     files.sort()
     print(f'start: {start}, count: {count}')
     files = files[start: start+count]
+    # print(f'files: {files}')
     global cursor
     cursor = 0
-    plot_annotation(files[0])
-    fig.canvas.draw()
+    output_dir = "/home/palakons/astyx-vis/res"
+    for file in files:
+        print(f'file: {file}')
+        plot_annotation(file, os.path.join(output_dir, file[:6] + '.jpg'))
+        
+        
+    # fig.canvas.draw()
 
     def press(event):
         global cursor
@@ -312,9 +397,9 @@ def main(argv):
         sys.stdout.flush()
         plot_annotation(files[cursor])
         fig.canvas.draw()
-    fig.canvas.mpl_connect('key_press_event', press)
-    plt.get_current_fig_manager().full_screen_toggle()
-    plt.show()
+    # fig.canvas.mpl_connect('key_press_event', press)
+    # plt.get_current_fig_manager().full_screen_toggle()
+    # plt.show()
 
 
 if __name__ == "__main__":
